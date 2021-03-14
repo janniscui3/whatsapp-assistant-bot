@@ -1,20 +1,24 @@
 from selenium import webdriver
+from selenium.webdriver.common import keys
 from selenium.webdriver.common.keys import Keys
 from selenium.common.exceptions import NoSuchElementException, StaleElementReferenceException, ElementNotVisibleException
 import time
 import os
 from urllib.parse import quote_plus
 
+from selenium.webdriver.remote.webelement import WebElement
+
 
 driver = webdriver.Chrome()                     # Needs to be global for all classes to use
 driver.get('https://web.whatsapp.com')
 
 
-MESSAGE_BUBBLE_CLASS_NAME = "_13mgZ"            # !!! Update this if the bot stops working, means Whatsapp have changed
+MESSAGE_BUBBLE_CLASS_NAME = "_2x4bz"            # !!! Update this if the bot stops working, means Whatsapp have changed
                                                 # the class attribute names
-
+MESSAGE_CLICK_BUTTON = "_1E0Oz"                  # For some reason the ENTER key doesnt work, so we use this to click the button in Whatsapp instead.
 
 class BotConfig(object):
+    # Input: Contact list
     last_msg = False
     last_msg_id = False
 
@@ -28,10 +32,12 @@ class BotConfig(object):
         return self.contacts
 
     def set_last_chat_message(self, msg, time_id):
+        # Given a message and its ID, set the attributes in the Config to said message and ID
         self.last_msg = msg
         self.last_msg_id = time_id
 
     def get_last_chat_message(self):
+        # return msg and id
         return self.last_msg, self.last_msg_id
 
     def set_last_command(self, command):
@@ -44,11 +50,13 @@ class BotConfig(object):
 
 class Bot(object):
     def __init__(self):
+        # gets whatsapp contacts and initialises it in config
         self.config = BotConfig(contact_list=whatsapp_contacts())
         self.init_bot()
 
     def init_bot(self):
         while True:
+            # calls poll chat function permanently
             self.poll_chat()
 
     def poll_chat(self):
@@ -57,29 +65,41 @@ class Bot(object):
         if last_msg:
             time_id = time.strftime('%H-%M-%S', time.gmtime())
 
+            # Gets message and msg_id from config
             last_saved_msg, last_saved_msg_id = self.config.get_last_chat_message()
+
+            # Compare saved message and id to current given message and id
             if last_saved_msg != last_msg and last_saved_msg_id != time_id:
+                # If not the same, overwrite last message and id in config
+                
                 self.config.set_last_chat_message(msg=last_msg, time_id=time_id)
 
                 print(self.config.get_last_chat_message())
 
                 is_action = is_action_message(last_msg=last_msg)
+                # If the message starts with a /
                 if is_action:
+                    # set the last command in config
                     self.config.set_last_command(last_msg)
+
+                    # and call bot_options
                     self.bot_options(action=last_msg)
 
     def bot_options(self, action):
+        """Given a command(action), lookup whether said command exists and then perform it"""
+        # setup dictionary with commands
         simple_menu = {                                 # function requires no extra arguments
             "hi": say_hi,
+            "jannis": say_jannis,
             "help": self._help_commands,
-            "all_commands": self.config.get_command_history,
         }
         simple_menu_keys = simple_menu.keys()
 
         try:
+            # Split the / in command
             command_args = action[1:].split(" ", 1)
             print("Command args: {cmd}".format(cmd=command_args))
-
+            # If the command is in dictionary menu, execute the commands function
             if len(command_args) == 1 and command_args[0] in simple_menu_keys:
                 send_message(simple_menu[command_args[0]]())
 
@@ -117,7 +137,7 @@ class Bot(object):
         print("Asking for help")
         return "List of commands:\n" \
                "/hi (bot says hi), " \
-               "/all_commands (ist of all commands), " \
+               "/jannis, " \
                "/google {query} (searches google and returns a screenshot of the query), " \
                "/images {query} (searches google immages and returns a screenshot of the query), " \
                "/maps (searches google maps and returns a screenshot of the query)"
@@ -287,25 +307,28 @@ def say_hi():
     print("Saying hi")
     return "Bot says hi"
 
-
+def say_jannis():
+    print("Sagt Jannis")
+    return "Jannis sagt Hi"
 """
 Helper Methods
 """
 
 
 def chat_history():
-    text_bubbles = driver.find_elements_by_class_name("message-out")  # message-in = receiver, message-out = sender
+    """ Reads current chat history, either outgoing or ingoing """
+    text_bubbles = driver.find_elements_by_class_name("message-in")  # message-in = receiver, message-out = sender
     tmp_queue = []
 
     try:
         for bubble in text_bubbles:
+            # Searches for copyable text in the text_bubbles elemenet
             msg_texts = bubble.find_elements_by_class_name("copyable-text")
             for msg in msg_texts:
                 tmp_queue.append(msg.text.lower())
 
         if len(tmp_queue) > 0:
             return tmp_queue[-1]  # Send last message in list
-
     except StaleElementReferenceException as e:
         print(str(e))
         # Something went wrong, either keep polling until it comes back or figure out alternative
@@ -314,6 +337,7 @@ def chat_history():
 
 
 def is_action_message(last_msg):
+    """Checks if the last message starts with a /"""
     if last_msg[0] == "/":
         return True
 
@@ -322,13 +346,27 @@ def is_action_message(last_msg):
 
 
 def send_message(msg):
+    """Sends a Message"""
+    count = 0
     whatsapp_msg = driver.find_element_by_class_name(MESSAGE_BUBBLE_CLASS_NAME)
     whatsapp_msg.send_keys(msg)
     whatsapp_msg.send_keys(Keys.ENTER)
+    while True:
+        try:
+            clickable_button = driver.find_element_by_class_name(MESSAGE_CLICK_BUTTON)
+            clickable_button.click()
+            break
+        except:
+            time.sleep(1)
+            count += 1
+            if (count >= 5):
+                break 
+            continue
+            
+        
 
-
-# Get all the contacts
 def whatsapp_contacts():
+    """Gets Contacts of Bot user"""
     contacts = driver.find_elements_by_class_name("chat-title")
 
     return [contact.text for contact in contacts]
@@ -337,3 +375,5 @@ def whatsapp_contacts():
 if __name__ == "__main__":
     print("Bot is active, scan your QR code from your phone's WhatsApp")
     Bot()
+
+
