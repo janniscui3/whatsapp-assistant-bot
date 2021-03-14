@@ -137,7 +137,7 @@ class Bot(object):
         print("Asking for help")
         return "List of commands:\n" \
                "/hi (bot says hi), " \
-               "/jannis, " \
+               "/jannis (developer-test), " \
                "/google {query} (searches google and returns a screenshot of the query), " \
                "/images {query} (searches google immages and returns a screenshot of the query), " \
                "/maps (searches google maps and returns a screenshot of the query)"
